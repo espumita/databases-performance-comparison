@@ -5,8 +5,7 @@ namespace AzureCosmosDB;
 
 public class AzureCosmosDbConnection {
     private const string DatabaseId = "DatabaseForBenchmarks";
-    public const string Container3AId = "Container3A";
-    public const string Container3BId = "Container3B";
+    public const string Container1Id = "Container1";
     public const string Container4Id = "Container4";
     private const string PartitionKeyPath = "/id";
     private const int RUsForTheDatabase = 400;
@@ -25,11 +24,7 @@ public class AzureCosmosDbConnection {
             throughput: RUsForTheDatabase
         );
         await database.CreateContainerIfNotExistsAsync(
-            id: Container3AId,
-            partitionKeyPath: PartitionKeyPath
-        );
-        await database.CreateContainerIfNotExistsAsync(
-            id: Container3BId,
+            id: Container1Id,
             partitionKeyPath: PartitionKeyPath
         );
         await database.CreateContainerIfNotExistsAsync(
@@ -49,50 +44,67 @@ public class AzureCosmosDbConnection {
         return result;
     }
 
-    public async Task InsetOption3AItemsIfNotExists(List<SampleItem> items) {
-        var containerId = Container3AId;
-        var oneItem = await Query<Item>(@$"
-            SELECT 
-                *
+    public async Task InsetOption1ItemsIfNotExists(List<SampleItem> items) {
+        var containerId = Container1Id;
+        var oneItem = await Query<Product>(@$"
+            SELECT
+                c.id,
+                t.TenantId,
+                u.UserId,
+                s.SessionId,
+                s.Data
             FROM 
                 c
-            WHERE 
+            JOIN
+                 t IN c.tenants
+            JOIN
+                 u IN t.users
+            JOIN
+                 s IN u.sessions
+            where
                 c.id = '{items[0].id}'
-                AND c.TenantId = '{items[0].TenantId}'
-                AND c.UserId = '{items[0].UserId}'
-                AND c.SessionId = '{items[0].SessionId}'
-        ",
-        containerId);
-        if (oneItem.Count > 0) return;
-        foreach (var item in items) {
-            var container = client.GetContainer(DatabaseId, containerId);
-            await container.UpsertItemAsync(item);
-        }
-    }
-
-    public async Task InsetOption3BItemsIfNotExists(List<SampleItem> items) {
-        var containerId = Container3BId;
-        var oneItem = await Query<Item>(@$"
-            SELECT 
-                *
-            FROM 
-                c
-            WHERE 
-                c.id = '{items[0].id}'
-                AND c.TenantId = '{items[0].TenantId}'
-                AND c.UserId = '{items[0].UserId}'
-                AND c.SessionId = '{items[0].SessionId}'
+                AND t.TenantId = '{items[0].TenantId}'
+                AND u.UserId = '{items[0].UserId}'
+                AND s.SessionId = '{items[0].SessionId}'
         ",
         containerId,
         new QueryRequestOptions {
             PartitionKey = new PartitionKey(items[0].id)
         });
         if (oneItem.Count > 0) return;
-        foreach (var item in items) {
+        var groupsByIds = items.GroupBy(x => x.id);
+
+        var products = new List<Product>();
+        foreach (var groupsById in groupsByIds) {
+            var id = groupsById.Key;
+            var tenants = new List<Tenant>();
+            var product = new Product(id, tenants);
+            products.Add(product);
+            var groupsByTenantIds = groupsById.GroupBy(x => x.TenantId);
+            foreach (var groupsByTenantId in groupsByTenantIds) {
+                var tenantId = groupsByTenantId.Key;
+                var users = new List<User>();
+                tenants.Add(new Tenant(tenantId, users));
+                var groupsByUsersIds = groupsByTenantId.GroupBy(x => x.UserId);
+                foreach (var groupsByUsersId in groupsByUsersIds) {
+                    var userId = groupsByUsersId.Key;
+                    var session = new List<Session>();
+                    users.Add(new User(userId, session));
+                    var groupsBySessionIds = groupsByUsersId.GroupBy(x => x.SessionId);
+                    foreach (var groupsBySessionsIds in groupsBySessionIds) {
+                        var sessionIds = groupsBySessionsIds.Key;
+                        var sampleItem = groupsBySessionsIds.Single(x => x.SessionId.Equals(sessionIds));
+                        session.Add(new Session(sessionIds, sampleItem.Data));
+                    }
+                }
+            }
+        }
+
+        foreach (var product in products) {
             var container = client.GetContainer(DatabaseId, containerId);
             await container.UpsertItemAsync(
-                item,
-                new PartitionKey((item as Item).id)
+                product,
+                new PartitionKey(product.id)
             );
         }
     }
@@ -121,3 +133,11 @@ public class AzureCosmosDbConnection {
         }
     }
 }
+
+public record Product(string id, IEnumerable<Tenant> tenants);
+
+public record Tenant(string TenantId, IEnumerable<User> users);
+
+public record User(string UserId, IEnumerable<Session> sessions);
+
+public record Session(string SessionId, string Data);
