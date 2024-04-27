@@ -32,7 +32,7 @@ public class AzureCosmosDBBenchmarks {
     static string WhereAmI([CallerFilePath] string callerFilePath = "") => callerFilePath;
 
     private async Task<List<SampleItem>> SampleItems() {
-        const string sampleItemsCsv = "./sample-items.csv";
+        const string sampleItemsCsv = "./cosmos-db-sample-items.csv";
         string basePath = Path.GetDirectoryName(WhereAmI());
         string targetPath = Path.Combine(basePath, sampleItemsCsv);
         if (File.Exists(targetPath)) {
