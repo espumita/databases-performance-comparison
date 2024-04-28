@@ -1,12 +1,14 @@
 ﻿using AzureCosmosDB.Model;
 using Microsoft.Azure.Cosmos;
+using User = AzureCosmosDB.Model.User;
 
 namespace AzureCosmosDB;
 
 public class AzureCosmosDbConnection {
     private const string DatabaseId = "DatabaseForBenchmarks";
     public const string Container1Id = "Container1";
-    public const string Container4Id = "Container4";
+    public const string Container2Id = "Container2";
+    public const string Container3Id = "Container3";
     private const string PartitionKeyPath = "/id";
     private const int RUsForTheDatabase = 400;
     private readonly CosmosClient client;
@@ -28,7 +30,11 @@ public class AzureCosmosDbConnection {
             partitionKeyPath: PartitionKeyPath
         );
         await database.CreateContainerIfNotExistsAsync(
-            id: Container4Id,
+            id: Container2Id,
+            partitionKeyPath: PartitionKeyPath
+        );
+        await database.CreateContainerIfNotExistsAsync(
+            id: Container3Id,
             partitionKeyPath: PartitionKeyPath
         );
     }
@@ -92,9 +98,9 @@ public class AzureCosmosDbConnection {
                     users.Add(new User(userId, session));
                     var groupsBySessionIds = groupsByUsersId.GroupBy(x => x.SessionId);
                     foreach (var groupsBySessionsIds in groupsBySessionIds) {
-                        var sessionIds = groupsBySessionsIds.Key;
-                        var sampleItem = groupsBySessionsIds.Single(x => x.SessionId.Equals(sessionIds));
-                        session.Add(new Session(sessionIds, sampleItem.Data));
+                        var sessionId = groupsBySessionsIds.Key;
+                        var sampleItem = groupsBySessionsIds.Single(x => x.SessionId.Equals(sessionId));
+                        session.Add(new Session(sessionId, sampleItem.Data));
                     }
                 }
             }
@@ -109,8 +115,47 @@ public class AzureCosmosDbConnection {
         }
     }
 
-    public async Task InsetOption4ItemsIfNotExists(List<Option4SampleItem> option4SamplesItems) {
-        var containerId = Container4Id;
+    public async Task InsetOption2ItemsIfNotExists(List<Option2SampleItem> items) {
+        var containerId = Container2Id;
+        var oneItem = await Query<Product>(@$"
+            SELECT
+                c.id,
+                t.TenantUserAndSessionId,
+                t.Data
+            FROM 
+                c
+            JOIN
+                 t IN c.Rows
+            where
+                c.id = '{items[0].id}'
+                AND t.TenantUserAndSessionId = '{items[0].TenantUserAndSessionId}'
+        ",
+        containerId,
+        new QueryRequestOptions {
+            PartitionKey = new PartitionKey(items[0].id)
+        });
+        if (oneItem.Count > 0) return;
+        var groupsByIds = items.GroupBy(x => x.id);
+
+        var products = groupsByIds.Select(groupsById => new ProductOption2(
+            groupsById.Key,
+            groupsById.Select(group => new TenantUserAndSession(
+                    group.TenantUserAndSessionId,
+                    group.Data
+                )).ToList()
+        )).ToList();
+
+        foreach (var product in products) {
+            var container = client.GetContainer(DatabaseId, containerId);
+            await container.UpsertItemAsync(
+                product,
+                new PartitionKey(product.id)
+            );
+        }
+    }
+
+    public async Task InsetOption3ItemsIfNotExists(List<Option4SampleItem> option4SamplesItems) {
+        var containerId = Container3Id;
         var oneItem = await Query<Item>(@$"
             SELECT 
                 *
@@ -134,10 +179,3 @@ public class AzureCosmosDbConnection {
     }
 }
 
-public record Product(string id, IEnumerable<Tenant> tenants);
-
-public record Tenant(string TenantId, IEnumerable<User> users);
-
-public record User(string UserId, IEnumerable<Session> sessions);
-
-public record Session(string SessionId, string Data);
