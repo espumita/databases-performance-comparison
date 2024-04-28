@@ -16,6 +16,6 @@ public record ProductOption2(string id, IEnumerable<TenantUserAndSession> Rows);
 
 public record TenantUserAndSession(string TenantUserAndSessionId, string Data);
 
-public record Option4SampleItem(string id, string Data) : Item(id);
-
 public record Option2SampleItem(string id, string TenantUserAndSessionId, string Data) : Item(id);
+
+public record Option3SampleItem(string id, string Data) : Item(id);

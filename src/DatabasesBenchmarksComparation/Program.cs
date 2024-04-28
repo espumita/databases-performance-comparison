@@ -23,7 +23,7 @@ public class AzureCosmosDBBenchmarks {
     private AzureCosmosDbConnection azureCosmosDbConnection;
     private List<SampleItem> sampleItems;
     private List<Option2SampleItem> option2SamplesItems;
-    private List<Option4SampleItem> option4SamplesItems;
+    private List<Option3SampleItem> option3SamplesItems;
 
     [Params(10000)] public int NumberOfValues { get; set; } = 10000;
 
@@ -38,12 +38,13 @@ public class AzureCosmosDBBenchmarks {
             $"{x.TenantId}-{x.UserId}-{x.SessionId}",
             x.Data
         )).ToList();
-        option4SamplesItems = sampleItems.Select(x => new Option4SampleItem(
+        option3SamplesItems = sampleItems.Select(x => new Option3SampleItem(
             $"{x.id}-{x.TenantId}-{x.UserId}-{x.SessionId}",
             x.Data
         )).ToList();
         await azureCosmosDbConnection.InsetOption2ItemsIfNotExists(option2SamplesItems);
-        await azureCosmosDbConnection.InsetOption3ItemsIfNotExists(option4SamplesItems);
+        await azureCosmosDbConnection.InsetOption3ItemsIfNotExists(option3SamplesItems);
+        await azureCosmosDbConnection.InsetOption4ItemsIfNotExists(sampleItems);
     }
 
     static string WhereAmI([CallerFilePath] string callerFilePath = "") => callerFilePath;
@@ -147,18 +148,26 @@ public class AzureCosmosDBBenchmarks {
     public async Task ReadOption3() {
         var randomIndex = new Random()
             .Next(0, NumberOfValues);
-        var item = await azureCosmosDbConnection.Query<Option4SampleItem>(@$"
-                SELECT 
-                    *
-                FROM 
-                    items i
-                WHERE 
-                    i.id = '{option4SamplesItems[randomIndex].id}'
-            ",
+        var item = await azureCosmosDbConnection.ReadItemAsync<Option3SampleItem>(
+            option3SamplesItems[randomIndex].id,
             AzureCosmosDbConnection.Container3Id,
-            new QueryRequestOptions {
-                PartitionKey = new PartitionKey(option4SamplesItems[randomIndex].id)
-            });
-        if (!item.Single().Equals(option4SamplesItems[randomIndex])) throw new Exception("Read has fail!");
+            new PartitionKey(option3SamplesItems[randomIndex].id)
+        );
+        if (!item.Equals(option3SamplesItems[randomIndex])) throw new Exception("Read has fail!");
+    }
+
+    [Benchmark]
+    public async Task ReadOption4() {
+        var randomIndex = new Random()
+            .Next(0, NumberOfValues);
+        var item = await azureCosmosDbConnection.ReadItemAsync<SampleItem>(
+            sampleItems[randomIndex].id,
+            AzureCosmosDbConnection.Container4Id,
+            new PartitionKeyBuilder()
+                .Add(sampleItems[randomIndex].TenantId)
+                .Add(sampleItems[randomIndex].UserId)
+                .Add(sampleItems[randomIndex].SessionId)
+                .Build());
+        if (!item.Equals(sampleItems[randomIndex])) throw new Exception("Read has fail!");
     }
 }
