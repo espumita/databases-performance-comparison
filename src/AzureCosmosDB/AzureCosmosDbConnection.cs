@@ -92,7 +92,7 @@ public class AzureCosmosDbConnection {
                  u IN t.users
             JOIN
                  s IN u.sessions
-            where
+            WHERE
                 c.id = '{items[0].id}'
                 AND t.TenantId = '{items[0].TenantId}'
                 AND u.UserId = '{items[0].UserId}'
@@ -151,7 +151,7 @@ public class AzureCosmosDbConnection {
                 c
             JOIN
                  t IN c.Rows
-            where
+            WHERE
                 c.id = '{items[0].id}'
                 AND t.TenantUserAndSessionId = '{items[0].TenantUserAndSessionId}'
         ",

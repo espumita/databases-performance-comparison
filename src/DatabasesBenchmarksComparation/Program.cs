@@ -16,7 +16,7 @@ public class Program {
 
 }
 
-[IterationCount(10)]
+[IterationCount(100)]
 [WarmupCount(1)]
 [MemoryDiagnoser]
 public class AzureCosmosDBBenchmarks {
@@ -25,7 +25,7 @@ public class AzureCosmosDBBenchmarks {
     private List<Option2SampleItem> option2SamplesItems;
     private List<Option3SampleItem> option3SamplesItems;
 
-    [Params(10000)] public int NumberOfValues { get; set; } = 10000;
+    [Params(100000)] public int NumberOfValues { get; set; } = 10000;
 
     [GlobalSetup]
     public async Task Setup() {
@@ -107,7 +107,7 @@ public class AzureCosmosDBBenchmarks {
                  u IN t.users
             JOIN
                  s IN u.sessions
-            where
+            WHERE
                 c.id = '{sampleItems[randomIndex].id}'
                 AND t.TenantId = '{sampleItems[randomIndex].TenantId}'
                 AND u.UserId = '{sampleItems[randomIndex].UserId}'
@@ -133,7 +133,7 @@ public class AzureCosmosDBBenchmarks {
                 c
             JOIN
                  t IN c.Rows
-            where
+            WHERE
                 c.id = '{option2SamplesItems[randomIndex].id}'
                 AND t.TenantUserAndSessionId = '{option2SamplesItems[randomIndex].TenantUserAndSessionId}'
         ",
