@@ -351,3 +351,4 @@ MigrationBackup/
 
 # Samples
 cosmos-db-sample-items.csv
+mssql-product-operations.csv

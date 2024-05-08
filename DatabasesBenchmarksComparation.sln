@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AzureCosmosDB", "src\AzureC
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DatabasesBenchmarksComparation", "src\DatabasesBenchmarksComparation\DatabasesBenchmarksComparation.csproj", "{AF7F03D3-2ADB-492C-9C95-52D7270FCDFD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SqlServer", "src\SqlServer\SqlServer.csproj", "{ACACAECF-52DF-4C15-803E-B840F6578971}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{AF7F03D3-2ADB-492C-9C95-52D7270FCDFD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AF7F03D3-2ADB-492C-9C95-52D7270FCDFD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AF7F03D3-2ADB-492C-9C95-52D7270FCDFD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ACACAECF-52DF-4C15-803E-B840F6578971}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ACACAECF-52DF-4C15-803E-B840F6578971}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ACACAECF-52DF-4C15-803E-B840F6578971}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ACACAECF-52DF-4C15-803E-B840F6578971}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

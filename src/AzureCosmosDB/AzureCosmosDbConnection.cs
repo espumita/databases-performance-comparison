@@ -21,7 +21,7 @@ public class AzureCosmosDbConnection {
         );
     }
 
-    public async Task SetDatabaseAndContainers() {
+    public async Task SetUpDatabaseAndContainers() {
         Database database = await client.CreateDatabaseIfNotExistsAsync(
             id: DatabaseId,
             throughput: RUsForTheDatabase

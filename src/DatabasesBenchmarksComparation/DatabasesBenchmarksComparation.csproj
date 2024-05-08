@@ -15,6 +15,7 @@
 
 	<ItemGroup>
     <ProjectReference Include="..\AzureCosmosDB\AzureCosmosDB.csproj" />
+    <ProjectReference Include="..\SqlServer\SqlServer.csproj" />
   </ItemGroup>
 
 </Project>
