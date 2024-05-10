@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using BenchmarkDotNet.Attributes;
+﻿using BenchmarkDotNet.Attributes;
 using SqlServer;
 using SqlServer.Model;
 using System.Runtime.CompilerServices;
@@ -7,7 +6,7 @@ using SqlServer.Migrations;
 
 namespace databases_performance_comparison;
 
-[IterationCount(10)]
+[IterationCount(1)]
 [WarmupCount(1)]
 [MemoryDiagnoser]
 public class SqlServerBenchmarks {
@@ -26,22 +25,30 @@ public class SqlServerBenchmarks {
 
     [Benchmark]
     public async Task BaseCase() {
-        var randomIndex = new Random()
-            .Next(0, NumberOfValues);
-        var operations = await sqlServerConnection.QueryById(@$"
-          SELECT
-                OperationId,
-                OperationStatus,
-                ProductId,
-                OperationStartDate,
-                OperationEndDate,
-                OperationDetails
-          FROM
-              dbo.{DB.ProductsOperationsTable}
-          WHERE
-              OperationId = @OperationId",
-            "@OperationId", productOperations[randomIndex].Id);
-        if (!operations.Single().Equals(productOperations[randomIndex])) throw new Exception("Read has fail!");
+        for (int i = 0; i < 500; i++) {
+            var randomIndex = new Random()
+                .Next(0, NumberOfValues);
+            var productId = productOperations[randomIndex].ProductId;
+            var operationsByProductId = productOperations.Where(x => x.ProductId.Equals(productId)).ToList();
+            var maxDateTime = operationsByProductId.Max(x => x.StartDate);
+            var productOperation = operationsByProductId.First(x => x.StartDate.Equals(maxDateTime));
+            var operations = await sqlServerConnection.QueryById(@$"
+                SELECT TOP 1
+                    OperationId,
+                    OperationStatus,
+                    ProductId,
+                    OperationStartDate,
+                    OperationEndDate,
+                    OperationDetails
+                FROM
+                    dbo.{DB.ProductsOperationsTable}
+                WHERE
+                    ProductId = @ProductId
+                ORDER BY
+                    OperationStartDate DESC",
+                "@ProductId", productOperation.ProductId);
+            if (!operations.Single().Equals(productOperation)) throw new Exception("Read has fail!");
+        }
     }
 
     private async Task<List<ProductOperation>> ProductOperations() {
@@ -52,18 +59,21 @@ public class SqlServerBenchmarks {
             var lines = await File.ReadAllLinesAsync(targetPath);
             return lines.Select(CreateProductOperationFromLine).ToList();
         }
+        var OperationIds = Enumerable.Range(0, NumberOfValues / 100).Select(x => Guid.NewGuid().ToString()).ToList();
+
         var operations = Enumerable.Range(0, NumberOfValues)
-            .Select(x => ProductOperation())
+            .Select(x => ProductOperation(OperationIds))
             .ToList();
-        await File.WriteAllLinesAsync(targetPath, operations.Select(x => $"{x.Id},{(int)x.Status},{x.ProductId},{x.StartDate.ToString("yyyyMMdd_hhmmss", CultureInfo.InvariantCulture)},{x.EndDate.ToString("yyyyMMdd_hhmmss", CultureInfo.InvariantCulture)},{x.Details}"));
+        await File.WriteAllLinesAsync(targetPath, operations.Select(x => $"{x.Id},{(int)x.Status},{x.ProductId},{x.StartDate.Ticks},{x.EndDate.Ticks},{x.Details}"));
         return operations;
     }
 
-    private ProductOperation ProductOperation() {
+    private ProductOperation ProductOperation(List<string> operationIds) {
+        var operationIdIndex = new Random().Next(0, operationIds.Count);
         return new ProductOperation(
             Id: Guid.NewGuid().ToString(),
             Status: (OperationStatus) new Random().Next(0, 4),
-            ProductId: Guid.NewGuid().ToString(),
+            ProductId: operationIds[operationIdIndex],
             StartDate: RandomDate(),
             EndDate: RandomDate(),
             Details: Guid.NewGuid().ToString()
@@ -89,8 +99,8 @@ public class SqlServerBenchmarks {
             args[0],
             (OperationStatus) int.Parse(args[1]),
             args[2],
-            DateTime.ParseExact(args[3], "yyyyMMdd_hhmmss", CultureInfo.InvariantCulture),
-            DateTime.ParseExact(args[4], "yyyyMMdd_hhmmss", CultureInfo.InvariantCulture),
+            new DateTime(long.Parse(args[3])),
+            new DateTime(long.Parse(args[4])),
             args[5]);
     }
 }

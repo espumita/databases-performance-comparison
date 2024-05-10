@@ -1,5 +1,4 @@
 ﻿using BenchmarkDotNet.Running;
-using SqlServer;
 
 namespace databases_performance_comparison;
 

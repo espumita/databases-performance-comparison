@@ -1,5 +1,5 @@
-﻿using System.Globalization;
-using System.Reflection;
+﻿using System.Reflection;
+using System.Reflection.PortableExecutable;
 using FluentMigrator.Runner;
 using FluentMigrator.Runner.Initialization;
 using Microsoft.Data.SqlClient;
@@ -46,18 +46,19 @@ namespace SqlServer {
         public async Task InsetProductOperationsIfNotExists(List<ProductOperation> productOperations) {
             using (SqlConnection connection = new SqlConnection(ConnectionString(DB.DataBaseName, MssqlSaPassword))) {
                 connection.Open();
-                SqlCommand command = new SqlCommand(@$"
-                    SELECT
-                        OperationId
-                    FROM
-                        dbo.{DB.ProductsOperationsTable}
-                    WHERE
-                        OperationId = @OperationId", connection);
-                command.Parameters.AddWithValue("@OperationId", productOperations[0].Id);
-                var result = await command.ExecuteScalarAsync();
-                if (result == null) {
-                    foreach (var productOperation in productOperations) {
-                        SqlCommand insertProductOperationCommand = new SqlCommand(@$"
+                try {
+                    SqlCommand command = new SqlCommand(@$"
+                        SELECT
+                            OperationId
+                        FROM
+                            dbo.{DB.ProductsOperationsTable}
+                        WHERE
+                            OperationId = @OperationId", connection);
+                    command.Parameters.AddWithValue("@OperationId", productOperations[0].Id);
+                    var result = await command.ExecuteScalarAsync();
+                    if (result == null) {
+                        foreach (var productOperation in productOperations) {
+                            SqlCommand insertProductOperationCommand = new SqlCommand(@$"
                             INSERT INTO dbo.{DB.ProductsOperationsTable} (
                                 OperationId,
                                 OperationStatus,
@@ -73,15 +74,20 @@ namespace SqlServer {
                                 @OperationEndDate,
                                 @OperationDetails
                             );", connection);
-                        insertProductOperationCommand.Parameters.AddWithValue("@OperationId", productOperation.Id);
-                        insertProductOperationCommand.Parameters.AddWithValue("@OperationStatus", (int) productOperation.Status);
-                        insertProductOperationCommand.Parameters.AddWithValue("@ProductId", productOperation.ProductId);
-                        insertProductOperationCommand.Parameters.AddWithValue("@OperationStartDate", productOperation.StartDate);
-                        insertProductOperationCommand.Parameters.AddWithValue("@OperationEndDate", productOperation.EndDate);
-                        insertProductOperationCommand.Parameters.AddWithValue("@OperationDetails", productOperation.Details);
-                        await insertProductOperationCommand.ExecuteNonQueryAsync();
-                    };
+                            insertProductOperationCommand.Parameters.AddWithValue("@OperationId", productOperation.Id);
+                            insertProductOperationCommand.Parameters.AddWithValue("@OperationStatus", (int)productOperation.Status);
+                            insertProductOperationCommand.Parameters.AddWithValue("@ProductId", productOperation.ProductId);
+                            insertProductOperationCommand.Parameters.AddWithValue("@OperationStartDate", productOperation.StartDate);
+                            insertProductOperationCommand.Parameters.AddWithValue("@OperationEndDate", productOperation.EndDate);
+                            insertProductOperationCommand.Parameters.AddWithValue("@OperationDetails", productOperation.Details);
+                            await insertProductOperationCommand.ExecuteNonQueryAsync();
+                        };
+                    }
+                } finally {
+                    connection.Close();
                 }
+
+
             }
 
         }
