@@ -3,6 +3,7 @@ using SqlServer;
 using SqlServer.Model;
 using System.Runtime.CompilerServices;
 using SqlServer.Migrations;
+using System.Linq;
 
 namespace databases_performance_comparison;
 
@@ -12,6 +13,7 @@ namespace databases_performance_comparison;
 public class SqlServerBenchmarks {
     private SqlServerConnection sqlServerConnection;
     private List<ProductOperation> productOperations;
+    private List<ProductOperation> productOperationsToQuery;
 
     [Params(80000)] public int NumberOfValues { get; set; } = 80000;
 
@@ -21,17 +23,13 @@ public class SqlServerBenchmarks {
         await sqlServerConnection.SetUpDatabaseAndTables();
         productOperations = await ProductOperations();
         await sqlServerConnection.InsetProductOperationsIfNotExists(productOperations);
+        await sqlServerConnection.InsetProductOperations2IfNotExists(productOperations);
+        productOperationsToQuery = ProductOperationsToQuery(500);
     }
-
-    [Benchmark]
+    
+    //[Benchmark]
     public async Task BaseCase() {
-        for (int i = 0; i < 500; i++) {
-            var randomIndex = new Random()
-                .Next(0, NumberOfValues);
-            var productId = productOperations[randomIndex].ProductId;
-            var operationsByProductId = productOperations.Where(x => x.ProductId.Equals(productId)).ToList();
-            var maxDateTime = operationsByProductId.Max(x => x.StartDate);
-            var productOperation = operationsByProductId.First(x => x.StartDate.Equals(maxDateTime));
+        foreach (var productOperation in productOperationsToQuery) {
             var operations = await sqlServerConnection.QueryById(@$"
                 SELECT TOP 1
                     OperationId,
@@ -51,6 +49,54 @@ public class SqlServerBenchmarks {
         }
     }
 
+    //[Benchmark]
+    public async Task WithComposedIndex() {
+        foreach (var productOperation in productOperationsToQuery) {
+            var operations = await sqlServerConnection.QueryById(@$"
+                SELECT TOP 1
+                    OperationId,
+                    OperationStatus,
+                    ProductId,
+                    OperationStartDate,
+                    OperationEndDate,
+                    OperationDetails
+                FROM
+                    dbo.{DB.ProductsOperationsTable2}
+                WHERE
+                    ProductId = @ProductId
+                ORDER BY
+                    ProductId, OperationStartDate DESC",
+                "@ProductId", productOperation.ProductId);
+            if (!operations.Single().Equals(productOperation)) throw new Exception("Read has fail!");
+        }
+    }
+
+    [Benchmark]
+    public async Task AllInOneSingleQuery() {
+        var operations = await sqlServerConnection.QueryByAllIds(@$"
+            SELECT
+                OperationId,
+                OperationStatus,
+                ProductId,
+                OperationStartDate,
+                OperationEndDate,
+                OperationDetails
+            FROM
+                dbo.{DB.ProductsOperationsTable2}
+            WHERE
+                ProductId IN ( @ProductIds )
+            ORDER BY
+                ProductId, OperationStartDate DESC",
+            "@ProductIds", productOperationsToQuery.Select(x => x.ProductId).ToList());
+        var operationsGroupedByOperator = operations.GroupBy(x => x.ProductId);
+        var lastOperations = new List<ProductOperation>();
+        foreach (var group in operationsGroupedByOperator) {
+            var lastOperation = group.ToList().First();
+            lastOperations.Add(lastOperation);
+        }
+        if (!productOperationsToQuery.All(operation => lastOperations.Contains(operation))) throw new Exception("Read has fail!");
+    }
+
     private async Task<List<ProductOperation>> ProductOperations() {
         const string productOperationsCsv = "./mssql-product-operations.csv";
         string basePath = Path.GetDirectoryName(WhereAmI());
@@ -66,6 +112,17 @@ public class SqlServerBenchmarks {
             .ToList();
         await File.WriteAllLinesAsync(targetPath, operations.Select(x => $"{x.Id},{(int)x.Status},{x.ProductId},{x.StartDate.Ticks},{x.EndDate.Ticks},{x.Details}"));
         return operations;
+    }
+
+    private List<ProductOperation> ProductOperationsToQuery(int numberOfQueries) {
+        return Enumerable.Range(0, numberOfQueries).Select(x => {
+            var randomIndex = new Random()
+                .Next(0, NumberOfValues);
+            var productId = productOperations[randomIndex].ProductId;
+            var operationsByProductId = productOperations.Where(x => x.ProductId.Equals(productId)).ToList();
+            var maxDateTime = operationsByProductId.Max(x => x.StartDate);
+            return operationsByProductId.First(x => x.StartDate.Equals(maxDateTime));
+        }).ToList();
     }
 
     private ProductOperation ProductOperation(List<string> operationIds) {

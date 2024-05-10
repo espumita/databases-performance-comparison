@@ -1,5 +1,4 @@
 ﻿using System.Reflection;
-using System.Reflection.PortableExecutable;
 using FluentMigrator.Runner;
 using FluentMigrator.Runner.Initialization;
 using Microsoft.Data.SqlClient;
@@ -38,7 +37,7 @@ namespace SqlServer {
             runner.MigrateUp();
         }
 
-        string ConnectionString(string databaseName, string mssqlSaPassword) {
+        private string ConnectionString(string databaseName, string mssqlSaPassword) {
             return
                 $"Server=host.docker.internal; Database={databaseName}; User Id=sa;Password={mssqlSaPassword};TrustServerCertificate=true;";
         }
@@ -92,6 +91,55 @@ namespace SqlServer {
 
         }
 
+        public async Task InsetProductOperations2IfNotExists(List<ProductOperation> productOperations) {
+            using (SqlConnection connection = new SqlConnection(ConnectionString(DB.DataBaseName, MssqlSaPassword))) {
+                connection.Open();
+                try {
+                    SqlCommand command = new SqlCommand(@$"
+                        SELECT
+                            OperationId
+                        FROM
+                            dbo.{DB.ProductsOperationsTable2}
+                        WHERE
+                            OperationId = @OperationId", connection);
+                    command.Parameters.AddWithValue("@OperationId", productOperations[0].Id);
+                    var result = await command.ExecuteScalarAsync();
+                    if (result == null) {
+                        foreach (var productOperation in productOperations) {
+                            SqlCommand insertProductOperationCommand = new SqlCommand(@$"
+                            INSERT INTO dbo.{DB.ProductsOperationsTable2} (
+                                OperationId,
+                                OperationStatus,
+                                ProductId,
+                                OperationStartDate,
+                                OperationEndDate,
+                                OperationDetails
+                            ) VALUES (
+                                @OperationId,
+                                @OperationStatus,
+                                @ProductId,
+                                @OperationStartDate,
+                                @OperationEndDate,
+                                @OperationDetails
+                            );", connection);
+                            insertProductOperationCommand.Parameters.AddWithValue("@OperationId", productOperation.Id);
+                            insertProductOperationCommand.Parameters.AddWithValue("@OperationStatus", (int)productOperation.Status);
+                            insertProductOperationCommand.Parameters.AddWithValue("@ProductId", productOperation.ProductId);
+                            insertProductOperationCommand.Parameters.AddWithValue("@OperationStartDate", productOperation.StartDate);
+                            insertProductOperationCommand.Parameters.AddWithValue("@OperationEndDate", productOperation.EndDate);
+                            insertProductOperationCommand.Parameters.AddWithValue("@OperationDetails", productOperation.Details);
+                            await insertProductOperationCommand.ExecuteNonQueryAsync();
+                        };
+                    }
+                } finally {
+                    connection.Close();
+                }
+
+
+            }
+
+        }
+
         public async Task<IEnumerable<ProductOperation>> QueryById(string query, string parameterName, string parameterValue) {
             var retults = new List<ProductOperation>();
             using (SqlConnection connection = new SqlConnection(ConnectionString(DB.DataBaseName, MssqlSaPassword))) {
@@ -108,6 +156,32 @@ namespace SqlServer {
                             (DateTime) reader["OperationStartDate"], 
                             (DateTime) reader["OperationEndDate"],
                             (string) reader["OperationDetails"]
+                        ));
+                    }
+                } finally {
+                    reader.Close();
+                }
+            }
+            return retults;
+        }
+
+        public async Task<IEnumerable<ProductOperation>> QueryByAllIds(string query, string parameterName, List<string> parameterValue) {
+            var retults = new List<ProductOperation>();
+            using (SqlConnection connection = new SqlConnection(ConnectionString(DB.DataBaseName, MssqlSaPassword))) {
+                connection.Open();
+                var parameterValues = string.Join(",", parameterValue.Select(x => $"'{x}'"));
+                var queryWithValues = query.Replace(parameterName, parameterValues);
+                SqlCommand command = new SqlCommand(queryWithValues, connection);
+                var reader = await command.ExecuteReaderAsync();
+                try {
+                    while (reader.Read()) {
+                        retults.Add(new ProductOperation(
+                            (string)reader["OperationId"],
+                            (OperationStatus)reader["OperationStatus"],
+                            (string)reader["ProductId"],
+                            (DateTime)reader["OperationStartDate"],
+                            (DateTime)reader["OperationEndDate"],
+                            (string)reader["OperationDetails"]
                         ));
                     }
                 } finally {
