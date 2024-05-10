@@ -1,3 +1,6 @@
+volumes:
+  mssql_benchmark_database_files: {}
+
 services:
   mssql-benchmarks-database:
     container_name: 'mssql-benchmarks-database'
@@ -8,4 +11,6 @@ services:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=ABCdef123|+.
       - MSSQL_COLLATION=SQL_Latin1_General_CP1_CI_AS
+    volumes:
+      - mssql_benchmark_database_files:/var/opt/mssql/
     restart: always

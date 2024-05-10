@@ -49,32 +49,6 @@ public class AzureCosmosDbConnection {
         );
     }
 
-    public async Task<List<T>> Query<T>(string query, string containerId, QueryRequestOptions options = null) {
-        var container = client.GetContainer(DatabaseId, containerId);
-        var queryIterator = container.GetItemQueryIterator<T>(query, null, options);
-        var result = new List<T>();
-        while (queryIterator.HasMoreResults) {
-            var response = await queryIterator.ReadNextAsync();
-            result.AddRange(response);
-        }
-        return result;
-    }
-
-    public async Task<T?> ReadItemAsync<T>(string id, string containerId, PartitionKey partitionKey) {
-        var container = client.GetContainer(DatabaseId, containerId);
-        T? readItemAsync = default(T);
-        try {
-            readItemAsync = await container.ReadItemAsync<T>(
-                id,
-                partitionKey
-            );
-        } catch (CosmosException exception) {
-            if (exception.Message.Contains("404")) return default(T);
-            throw;
-        }
-        return readItemAsync;
-    }
-
     public async Task InsetOption1ItemsIfNotExists(List<SampleItem> items) {
         var containerId = Container1Id;
         var oneItem = await Query<SampleItem>(@$"
@@ -98,10 +72,10 @@ public class AzureCosmosDbConnection {
                 AND u.UserId = '{items[0].UserId}'
                 AND s.SessionId = '{items[0].SessionId}'
         ",
-        containerId,
-        new QueryRequestOptions {
-            PartitionKey = new PartitionKey(items[0].id)
-        });
+            containerId,
+            new QueryRequestOptions {
+                PartitionKey = new PartitionKey(items[0].id)
+            });
         if (oneItem.Count > 0) return;
         var groupsByIds = items.GroupBy(x => x.id);
 
@@ -155,19 +129,19 @@ public class AzureCosmosDbConnection {
                 c.id = '{items[0].id}'
                 AND t.TenantUserAndSessionId = '{items[0].TenantUserAndSessionId}'
         ",
-        containerId,
-        new QueryRequestOptions {
-            PartitionKey = new PartitionKey(items[0].id)
-        });
+            containerId,
+            new QueryRequestOptions {
+                PartitionKey = new PartitionKey(items[0].id)
+            });
         if (oneItem.Count > 0) return;
         var groupsByIds = items.GroupBy(x => x.id);
 
         var products = groupsByIds.Select(groupsById => new ProductOption2(
             groupsById.Key,
             groupsById.Select(group => new TenantUserAndSession(
-                    group.TenantUserAndSessionId,
-                    group.Data
-                )).ToList()
+                group.TenantUserAndSessionId,
+                group.Data
+            )).ToList()
         )).ToList();
 
         foreach (var product in products) {
@@ -218,6 +192,32 @@ public class AzureCosmosDbConnection {
                     .Build()
             );
         }
+    }
+
+    public async Task<List<T>> Query<T>(string query, string containerId, QueryRequestOptions options = null) {
+        var container = client.GetContainer(DatabaseId, containerId);
+        var queryIterator = container.GetItemQueryIterator<T>(query, null, options);
+        var result = new List<T>();
+        while (queryIterator.HasMoreResults) {
+            var response = await queryIterator.ReadNextAsync();
+            result.AddRange(response);
+        }
+        return result;
+    }
+
+    public async Task<T?> ReadItemAsync<T>(string id, string containerId, PartitionKey partitionKey) {
+        var container = client.GetContainer(DatabaseId, containerId);
+        T? readItemAsync = default(T);
+        try {
+            readItemAsync = await container.ReadItemAsync<T>(
+                id,
+                partitionKey
+            );
+        } catch (CosmosException exception) {
+            if (exception.Message.Contains("404")) return default(T);
+            throw;
+        }
+        return readItemAsync;
     }
 }
 

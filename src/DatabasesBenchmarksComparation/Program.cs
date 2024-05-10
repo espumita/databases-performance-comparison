@@ -11,8 +11,9 @@ public class Program {
         //var summary = BenchmarkRunner.Run<AzureCosmosDBBenchmarks>();
 
         // -- SqlServer
-        var sqlServerBenchmarks = new SqlServerBenchmarks();
-        await sqlServerBenchmarks.Setup();
+        //var sqlServerBenchmarks = new SqlServerBenchmarks();
+        //await sqlServerBenchmarks.Setup();
+        var summary = BenchmarkRunner.Run<SqlServerBenchmarks>();
     }
 
 }
