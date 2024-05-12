@@ -6,7 +6,7 @@ using SqlServer.Migrations;
 
 namespace databases_performance_comparison;
 
-[IterationCount(100)]
+[IterationCount(10)]
 [WarmupCount(1)]
 [MemoryDiagnoser]
 public class SqlServerBenchmarks {
@@ -67,8 +67,8 @@ public class SqlServerBenchmarks {
                     WHERE
                         ProductId = @ProductId
                     ORDER BY
-                        ProductId, OperationStartDate DESC",
-                    "@ProductId", productOperation.ProductId);
+                        ProductId, OperationStartDate DESC
+                    ", "@ProductId", productOperation.ProductId);
                 if (!operations.Single().Equals(productOperation)) throw new Exception("Read has fail!");
             }
         }, DB.DataBaseName);
@@ -92,9 +92,43 @@ public class SqlServerBenchmarks {
                 WHERE
                     ProductId IN ( @ProductIds )
                 ORDER BY
-                    ProductId, OperationStartDate DESC",
-                "@ProductIds", productOperationsToQuery.Select(x => x.ProductId).ToList());
+                    ProductId, OperationStartDate DESC
+                ", "@ProductIds", productOperationsToQuery.Select(x => x.ProductId).ToList());
             operations.AddRange(rawOperations);
+        }, DB.DataBaseName);
+        var operationsGroupedByOperator = operations.GroupBy(x => x.ProductId);
+        var lastOperations = new List<ProductOperation>();
+        foreach (var group in operationsGroupedByOperator) {
+            var lastOperation = group.ToList().First();
+            lastOperations.Add(lastOperation);
+        }
+        if (!productOperationsToQuery.All(operation => lastOperations.Contains(operation))) throw new Exception("Read has fail!");
+    }
+
+    [Benchmark]
+    public async Task UsingChunks() {
+        var operations = new List<ProductOperation>();
+        await sqlServerConnection.ExecuteInConnectionScopeAsync(async sqlConnection => {
+            var productIds = productOperationsToQuery.Select(x => x.ProductId).ToList();
+            var chunks = productIds.Chunk(25);
+            foreach (var productIdsChunk in chunks) {
+                var rawOperations = await sqlServerConnection.QueryByAllIds(sqlConnection, @$"
+                SELECT
+                    OperationId,
+                    OperationStatus,
+                    ProductId,
+                    OperationStartDate,
+                    OperationEndDate,
+                    OperationDetails
+                FROM
+                    dbo.{DB.ProductsOperationsTable2}
+                WHERE
+                    ProductId IN ( @ProductIds )
+                ORDER BY
+                    ProductId, OperationStartDate DESC
+                ", "@ProductIds", productIdsChunk.ToList());
+                operations.AddRange(rawOperations);
+            }
         }, DB.DataBaseName);
         var operationsGroupedByOperator = operations.GroupBy(x => x.ProductId);
         var lastOperations = new List<ProductOperation>();
