@@ -6,7 +6,7 @@ using SqlServer.Migrations;
 
 namespace databases_performance_comparison;
 
-[IterationCount(1)]
+[IterationCount(100)]
 [WarmupCount(1)]
 [MemoryDiagnoser]
 public class SqlServerBenchmarks {
@@ -103,6 +103,36 @@ public class SqlServerBenchmarks {
             lastOperations.Add(lastOperation);
         }
         if (!productOperationsToQuery.All(operation => lastOperations.Contains(operation))) throw new Exception("Read has fail!");
+    }
+
+    [Benchmark]
+    public async Task UseMaxAggregationFunction() {
+        var operations = new List<ProductOperation>();
+        await sqlServerConnection.ExecuteInConnectionScopeAsync(async sqlConnection => {
+            var rawOperations = await sqlServerConnection.QueryByAllIds(sqlConnection, @$"
+                SELECT
+                    OperationId,
+                    OperationStatus,
+                    ProductId,
+                    OperationStartDate,
+                    OperationEndDate,
+                    OperationDetails
+                FROM
+                    dbo.{DB.ProductsOperationsTable2} PO2
+                WHERE
+                    ProductId IN ( @ProductIds )
+                    AND OperationStartDate = (
+                        SELECT
+                            MAX(OperationStartDate)
+                        FROM
+                            dbo.{DB.ProductsOperationsTable2}
+                        WHERE
+                            ProductId = PO2.ProductId
+                    )
+                ", "@ProductIds", productOperationsToQuery.Select(x => x.ProductId).ToList());
+            operations.AddRange(rawOperations);
+        }, DB.DataBaseName);
+        if (!productOperationsToQuery.All(operation => operations.Contains(operation))) throw new Exception("Read has fail!");
     }
 
     private async Task<List<ProductOperation>> ProductOperations() {
