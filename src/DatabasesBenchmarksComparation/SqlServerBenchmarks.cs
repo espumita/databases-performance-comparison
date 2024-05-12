@@ -3,7 +3,6 @@ using SqlServer;
 using SqlServer.Model;
 using System.Runtime.CompilerServices;
 using SqlServer.Migrations;
-using System.Linq;
 
 namespace databases_performance_comparison;
 
@@ -27,33 +26,61 @@ public class SqlServerBenchmarks {
         productOperationsToQuery = ProductOperationsToQuery(500);
     }
     
-    //[Benchmark]
+    [Benchmark]
     public async Task BaseCase() {
-        foreach (var productOperation in productOperationsToQuery) {
-            var operations = await sqlServerConnection.QueryById(@$"
-                SELECT TOP 1
-                    OperationId,
-                    OperationStatus,
-                    ProductId,
-                    OperationStartDate,
-                    OperationEndDate,
-                    OperationDetails
-                FROM
-                    dbo.{DB.ProductsOperationsTable}
-                WHERE
-                    ProductId = @ProductId
-                ORDER BY
-                    OperationStartDate DESC",
-                "@ProductId", productOperation.ProductId);
-            if (!operations.Single().Equals(productOperation)) throw new Exception("Read has fail!");
-        }
+        await sqlServerConnection.ExecuteInConnectionScopeAsync(async sqlConnection => {
+            foreach (var productOperation in productOperationsToQuery) {
+                var operations = await sqlServerConnection.QueryById(sqlConnection,@$"
+                    SELECT TOP 1
+                        OperationId,
+                        OperationStatus,
+                        ProductId,
+                        OperationStartDate,
+                        OperationEndDate,
+                        OperationDetails
+                    FROM
+                        dbo.{DB.ProductsOperationsTable}
+                    WHERE
+                        ProductId = @ProductId
+                    ORDER BY
+                        OperationStartDate DESC",
+                    "@ProductId", productOperation.ProductId);
+                if (!operations.Single().Equals(productOperation)) throw new Exception("Read has fail!");
+            }
+        }, DB.DataBaseName);
     }
 
-    //[Benchmark]
+    [Benchmark]
     public async Task WithComposedIndex() {
-        foreach (var productOperation in productOperationsToQuery) {
-            var operations = await sqlServerConnection.QueryById(@$"
-                SELECT TOP 1
+        await sqlServerConnection.ExecuteInConnectionScopeAsync(async sqlConnection => {
+            foreach (var productOperation in productOperationsToQuery) {
+                var operations = await sqlServerConnection.QueryById(sqlConnection,@$"
+                    SELECT TOP 1
+                        OperationId,
+                        OperationStatus,
+                        ProductId,
+                        OperationStartDate,
+                        OperationEndDate,
+                        OperationDetails
+                    FROM
+                        dbo.{DB.ProductsOperationsTable2}
+                    WHERE
+                        ProductId = @ProductId
+                    ORDER BY
+                        ProductId, OperationStartDate DESC",
+                    "@ProductId", productOperation.ProductId);
+                if (!operations.Single().Equals(productOperation)) throw new Exception("Read has fail!");
+            }
+        }, DB.DataBaseName);
+
+    }
+
+    [Benchmark]
+    public async Task AllInOneSingleQuery() {
+        var operations = new List<ProductOperation>();
+        await sqlServerConnection.ExecuteInConnectionScopeAsync(async sqlConnection => {
+            var rawOperations = await sqlServerConnection.QueryByAllIds(sqlConnection, @$"
+                SELECT
                     OperationId,
                     OperationStatus,
                     ProductId,
@@ -63,31 +90,12 @@ public class SqlServerBenchmarks {
                 FROM
                     dbo.{DB.ProductsOperationsTable2}
                 WHERE
-                    ProductId = @ProductId
+                    ProductId IN ( @ProductIds )
                 ORDER BY
                     ProductId, OperationStartDate DESC",
-                "@ProductId", productOperation.ProductId);
-            if (!operations.Single().Equals(productOperation)) throw new Exception("Read has fail!");
-        }
-    }
-
-    [Benchmark]
-    public async Task AllInOneSingleQuery() {
-        var operations = await sqlServerConnection.QueryByAllIds(@$"
-            SELECT
-                OperationId,
-                OperationStatus,
-                ProductId,
-                OperationStartDate,
-                OperationEndDate,
-                OperationDetails
-            FROM
-                dbo.{DB.ProductsOperationsTable2}
-            WHERE
-                ProductId IN ( @ProductIds )
-            ORDER BY
-                ProductId, OperationStartDate DESC",
-            "@ProductIds", productOperationsToQuery.Select(x => x.ProductId).ToList());
+                "@ProductIds", productOperationsToQuery.Select(x => x.ProductId).ToList());
+            operations.AddRange(rawOperations);
+        }, DB.DataBaseName);
         var operationsGroupedByOperator = operations.GroupBy(x => x.ProductId);
         var lastOperations = new List<ProductOperation>();
         foreach (var group in operationsGroupedByOperator) {
